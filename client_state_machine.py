@@ -1,8 +1,3 @@
-"""
-Created on Sun Apr  5 00:00:32 2015
-
-@author: zhengzhang
-"""
 from chat_utils import *
 import json
 
@@ -28,6 +23,7 @@ class ClientSM:
         return self.me
 
     def connect_to(self, peer):
+        ### IF REQUEST DECLINED, response["status"]=="busy"? ###
         msg = json.dumps({"action": "connect", "target": peer})
         mysend(self.s, msg)
         response = json.loads(myrecv(self.s))
@@ -76,6 +72,7 @@ class ClientSM:
                     self.out_msg += logged_in
 
                 elif my_msg[0] == 'c':
+                    ### IF REQUEST DECLINED, self.state = S_LOGGEDIN ? ###
                     peer = my_msg[1:]
                     peer = peer.strip()
                     if self.connect_to(peer) == True:
@@ -138,11 +135,27 @@ class ClientSM:
                     self.disconnect()
                     self.state = S_LOGGEDIN
                     self.peer = ''
-            if len(peer_msg) > 0:    # peer's stuff, coming in
+            if len(peer_msg) > 0:
 
                 # ----------your code here------#
                 peer_msg = json.loads(peer_msg)
-                print(peer_msg)
+                ### DECLINE PEER's REQUEST HERE ? ###
+                '''
+                # shouldn't use input() but I'm not sure what to use #
+                self.peer = peer_msg["from"]
+                self.out_msg += f'You got a request from {self.peer}.\n'
+                
+                self.out_msg += 'Do you accept this request?\n'
+                response = input('y/n\n')
+                if response == 'y':
+                    self.out_msg += f'You are connected with {self.peer}.\n'
+                    self.out_msg += 'Start chatting!\n\n'
+                    self.out_msg += '-----------------------------------\n'
+                    self.state = S_CHATTING
+                else:
+                    self.out_msg += f'You declined {self.peer}\'s request.\n'
+                    self.state = S_LOGGEDIN
+                '''
 
                 if peer_msg["action"] == "exchange":
                     self.out_msg += f'({peer_msg["from"]}) {peer_msg["message"]}'
@@ -155,6 +168,7 @@ class ClientSM:
                     self.state = S_CHATTING
 
                 # ----------end of your code----#
+                
             # Display the menu again
             if self.state == S_LOGGEDIN:
                 self.out_msg += menu

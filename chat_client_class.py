@@ -92,6 +92,7 @@ class Client:
         self.system_msg += 'Welcome to ICS chat\n'
         self.system_msg += 'Please enter your name: '
         self.output()
+        ### CHECK LOGIN PASSWORD HERE ###
         while self.login() != True:
             self.output()
         self.system_msg += 'Welcome, ' + self.get_name() + '!'

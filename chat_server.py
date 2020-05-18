@@ -1,9 +1,3 @@
-"""
-Created on Tue Jul 22 00:47:05 2014
-
-@author: alina, zzhang
-"""
-
 import time
 import socket
 import select
@@ -32,6 +26,9 @@ class Server:
         self.indices = {}
         # sonnet
         self.sonnet = indexer.PIndex("AllSonnets.txt")
+        ### Diffie-Hellman Key Exchange ###
+        self.base_key = 17837
+        self.clock_key = 17977
 
     def new_client(self, sock):
         # add to all sockets and to new clients
@@ -118,9 +115,27 @@ class Server:
                     msg = json.dumps(
                         {"action": "connect", "status": "no-user"})
                 mysend(from_sock, msg)
+            
 # ==============================================================================
 # handle messeage exchange: IMPLEMENT THIS
 # ==============================================================================
+
+            ### send public_private_key to peer to produce the shared_key ###
+            elif msg["action"] == "produce_public_private_keys":
+                from_name = self.logged_sock2name[from_sock]
+                to_name = msg["target"]
+                to_sock = self.logged_name2sock[to_name]
+                mysend(to_sock, json.dumps(
+                    {"action": "produce_public_private_keys", "target": from_name, "message": msg["message"]}))
+
+            elif msg["action"] == "produce_shared_keys":
+                from_name = self.logged_sock2name[from_sock]
+                to_name = msg["target"]
+                to_sock = self.logged_name2sock[to_name]
+                mysend(to_sock, json.dumps(
+                    {"action": "produce_shared_keys", "target": from_name, "message": msg["message"]}))
+
+                
             elif msg["action"] == "exchange":
                 from_name = self.logged_sock2name[from_sock]
                 """

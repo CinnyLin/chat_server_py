@@ -1,5 +1,6 @@
 from chat_utils import *
 import json
+import secrets ### like random module but more secure ###
 
 
 class ClientSM:
@@ -9,6 +10,15 @@ class ClientSM:
         self.me = ''
         self.out_msg = ''
         self.s = s
+        ### Diffie-Hellman Key Exchange ###
+        # user will be given a private key when login
+        self.private_key = secrets.randbits(17)
+        # base key for exponential; must be primitive root of clock key
+        self.base_key = 17837
+        # clock key for modulo; must be prime
+        self.clock_key = 17977  # partition prime
+        # final shared key!! first set to None
+        self.shared_key = None
 
     def set_state(self, state):
         self.state = state
@@ -44,6 +54,27 @@ class ClientSM:
         mysend(self.s, msg)
         self.out_msg += 'You are disconnected from ' + self.peer + '\n'
         self.peer = ''
+    
+    ### producing keys with Diffie-Hellman Key Exchange method ###
+    def produce_public_private_key(self):
+        return self.base_key**self.private_key % self.clock_key
+
+    def produce_shared_key(self, public_private_key):
+        self.shared_key = public_private_key**self.private_key % self.clock_key
+        return self.shared_key
+
+    ### messages are encrypted and decrypted with Diffie-Hellman Key Exchange method ###
+    def encrypt(self, msg):
+        encrypted_msg = ""
+        for digit in msg:
+            encrypted_msg += chr(ord(digit)+self.shared_key)
+        return encrypted_msg
+
+    def decrypt(self, encrypted_msg):
+        decrypted_msg = ""
+        for digit in encrypted_msg:
+            decrypted_msg += chr(ord(digit)-self.shared_key)
+        return decrypted_msg
 
     def proc(self, my_msg, peer_msg):
         self.out_msg = ''
@@ -79,6 +110,9 @@ class ClientSM:
                         self.state = S_CHATTING
                         self.out_msg += 'Connect to ' + peer + '. Chat away!\n\n'
                         self.out_msg += '-----------------------------------\n'
+                        ### send public_private_key to peer thorugh server to create shared_key ###
+                        ppkey = self.produce_public_private_key()
+                        mysend(self.s, json.dumps({"action": "produce_public_private_keys", "target": self.peer, "message": ppkey}))
                     else:
                         self.out_msg += 'Connection unsuccessful\n'
 
@@ -129,43 +163,54 @@ class ClientSM:
 # ==============================================================================
         elif self.state == S_CHATTING:
             if len(my_msg) > 0:     # my stuff going out
-                mysend(self.s, json.dumps(
-                    {"action": "exchange", "from": "[" + self.me + "]", "message": my_msg}))
+                
                 if my_msg == 'bye':
                     self.disconnect()
                     self.state = S_LOGGEDIN
                     self.peer = ''
+                    
+                ### encrypt self message ###
+                encrypted_msg = self.encrypt(my_msg)
+                mysend(self.s, json.dumps(
+                    {"action": "exchange", "from": "[" + self.me + "]", "message": encrypted_msg}))
+                    
+                    
             if len(peer_msg) > 0:
 
                 # ----------your code here------#
                 peer_msg = json.loads(peer_msg)
-                ### DECLINE PEER's REQUEST HERE ? ###
-                '''
-                # shouldn't use input() but I'm not sure what to use #
-                self.peer = peer_msg["from"]
-                self.out_msg += f'You got a request from {self.peer}.\n'
                 
-                self.out_msg += 'Do you accept this request?\n'
-                response = input('y/n\n')
-                if response == 'y':
-                    self.out_msg += f'You are connected with {self.peer}.\n'
-                    self.out_msg += 'Start chatting!\n\n'
-                    self.out_msg += '-----------------------------------\n'
-                    self.state = S_CHATTING
-                else:
-                    self.out_msg += f'You declined {self.peer}\'s request.\n'
-                    self.state = S_LOGGEDIN
-                '''
-
-                if peer_msg["action"] == "exchange":
-                    self.out_msg += f'({peer_msg["from"]}) {peer_msg["message"]}'
-                elif peer_msg["action"] == "disconnect":
-                    self.out_msg += f'{peer_msg["msg"]}\n'
-                    self.state = S_LOGGEDIN
-                elif peer_msg["action"] == "connect":
+                if peer_msg["action"] == "connect":
                     self.peer = peer_msg["from"]
                     self.out_msg += f'{peer_msg["from"]} joined the chat\n'
                     self.state = S_CHATTING
+                
+                ### send self's public_private_key to produce shared_key for peer ###
+                elif peer_msg["action"] == "produce_public_private_keys":
+                    ppkey = self.produce_public_private_key()
+                    mysend(self.s, json.dumps(
+                        {"action": "produce_shared_keys", "target": self.peer, "message": ppkey}))
+                    self.public_private_key = int(peer_msg["message"])
+                    self.shared_key = self.produce_shared_key(
+                        self.public_private_key)
+                    print(f"Your messages are encrypted. Chat away!")
+
+                ### get peer's public_private_key to produce shared_key for self ###
+                elif peer_msg["action"] == "produce_shared_keys":
+                    self.public_private_key = int(peer_msg["message"])
+                    self.shared_key = self.produce_shared_key(
+                        self.public_private_key)
+                    print(f"Your messages are encrypted. Chat away!")
+
+                elif peer_msg["action"] == "exchange":
+                    ### decrypt peer message ####
+                    decrypted_msg = self.decrypt(peer_msg["message"])
+                    self.out_msg += peer_msg["from"] + decrypted_msg
+                
+                elif peer_msg["action"] == "disconnect":
+                    self.out_msg += f'{peer_msg["msg"]}\n'
+                    self.state = S_LOGGEDIN
+                
 
                 # ----------end of your code----#
                 
